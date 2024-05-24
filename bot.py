@@ -17,7 +17,7 @@ CAT_API_URL = 'https://api.thecatapi.com/v1/images/search'
 
 # Define spam settings
 SPAM_THRESHOLD = 5  # Number of messages
-SPAM_INTERVAL = 10  # Interval in seconds
+SPAM_INTERVAL = 7  # Interval in seconds
 TIMEOUT_DURATION = 60  # Timeout duration in seconds (1 minute)
 COOLDOWN_DURATION = 20  # Cooldown duration for timeout messages in seconds
 SPAM_ALERT_INTERVAL = 120  # Interval for spam alert messages in seconds (2 minutes)
