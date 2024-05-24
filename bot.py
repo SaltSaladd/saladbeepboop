@@ -24,7 +24,7 @@ SPAM_ALERT_INTERVAL = 120  # Interval for spam alert messages in seconds (2 minu
 USER_TIMEOUT_COOLDOWN = 180  # Cooldown duration for user timeout messages in seconds (3 minutes)
 
 # Define wall of text settings
-TEXT_LIMIT = 500  # Character limit for messages
+TEXT_LIMIT = 900  # Character limit for messages
 
 # Track user messages, timeouts, and cooldowns
 user_messages = defaultdict(lambda: deque(maxlen=SPAM_THRESHOLD))
