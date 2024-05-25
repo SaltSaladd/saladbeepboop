@@ -5,26 +5,31 @@ import time
 import aiohttp
 from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
+import os  # For environment variables
 
+# Setup intents and bot instance
 intents = discord.Intents.default()
 intents.members = True
 intents.messages = True
-
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-TOKEN = 'YOUR_TOKEN_HERE'  # Replace 'YOUR_TOKEN_HERE' with your bot token
+# Securely load the bot token from environment variables
+TOKEN = os.getenv('DISCORD_BOT_TOKEN')
+if not TOKEN:
+    raise ValueError("Bot token not found. Set it in the environment variables.")
+
 CAT_API_URL = 'https://api.thecatapi.com/v1/images/search'
 
 # Define spam settings
-SPAM_THRESHOLD = 5  # Number of messages
-SPAM_INTERVAL = 7  # Interval in seconds
-TIMEOUT_DURATION = 60  # Timeout duration in seconds (1 minute)
-COOLDOWN_DURATION = 20  # Cooldown duration for timeout messages in seconds
-SPAM_ALERT_INTERVAL = 120  # Interval for spam alert messages in seconds (2 minutes)
-USER_TIMEOUT_COOLDOWN = 180  # Cooldown duration for user timeout messages in seconds (3 minutes)
+SPAM_THRESHOLD = 5
+SPAM_INTERVAL = 10
+TIMEOUT_DURATION = 60
+COOLDOWN_DURATION = 20
+SPAM_ALERT_INTERVAL = 120
+USER_TIMEOUT_COOLDOWN = 180
 
 # Define wall of text settings
-TEXT_LIMIT = 900  # Character limit for messages
+TEXT_LIMIT = 500
 
 # Track user messages, timeouts, and cooldowns
 user_messages = defaultdict(lambda: deque(maxlen=SPAM_THRESHOLD))
@@ -33,14 +38,14 @@ spam_alert_cooldowns = defaultdict(int)
 user_timeout_cooldowns = defaultdict(int)
 
 QUIET_CHANNEL_ID = 1231007921526280295  # Replace with your channel ID
-QUIET_THRESHOLD = 5  # Time in minutes
+QUIET_THRESHOLD = 5
 
 # Minigame states
 hangman_games = {}
 wordle_games = {}
 anagram_games = {}
 
-WORD_LIST = ['python', 'hangman', 'discord', 'bot', 'wordle', 'anagram', 'ohio', 'github', 'waffle', 'muffins']
+WORD_LIST = ['python', 'hangman', 'discord', 'bot', 'wordle', 'anagram']
 
 @bot.event
 async def on_ready():
@@ -62,7 +67,7 @@ async def check_activity():
 async def on_member_join(member):
     if 'bernd' in member.name.lower() or 'bernd' in member.display_name.lower() or '✔' in member.name or '✔' in member.display_name:
         await member.ban(reason="Flagged activities")
-        guild = bot.get_guild(SERVER_ID)  # Replace with your server ID
+        guild = bot.get_guild(SEVER_ID)  # Replace with your sever ID
         channel = guild.get_channel(QUIET_CHANNEL_ID)  # Replace with your channel ID
         await channel.send(f"{member.name} was banned for flagged activities.")
 
@@ -88,68 +93,79 @@ async def on_message(message):
         await message.channel.send(f"{message.author.mention} Too much text ;(")
         return
 
+    # Check if bot is mentioned and handle commands
     if bot.user in message.mentions:
         command = message.content.lower().split()
         if len(command) > 1:
-            if command[1] == "ping":
-                start_time = time.time()
-                response_message = await message.channel.send("PONG!")
-                end_time = time.time()
-                response_time = round((end_time - start_time) * 1000, 2)
-                await response_message.edit(content=f"PONG! {response_time} ms")
-            elif command[1] == "rps":
-                if len(command) == 3:
-                    user_choice = command[2].lower()
-                    if user_choice in ["rock", "paper", "scissors"]:
-                        bot_choice = random.choice(["rock", "paper", "scissors"])
-                        result = determine_rps_winner(user_choice, bot_choice)
-                        await message.channel.send(f"You chose {user_choice}, I chose {bot_choice}. {result}")
-                    else:
-                        await message.channel.send("Invalid choice! Choose rock, paper, or scissors.")
-            elif command[1] == "cat":
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(CAT_API_URL) as resp:
-                        if resp.status == 200:
-                            data = await resp.json()
-                            cat_image_url = data[0]['url']
-                            await message.channel.send(cat_image_url)
-                        else:
-                            await message.channel.send("Could not fetch a cat image at the moment. Please try again later.")
-            elif command[1] == "hangman":
-                await start_hangman(message.channel)
-            elif command[1] == "wordle":
-                await start_wordle(message.channel)
-            elif command[1] == "anagram":
-                await start_anagram(message.channel)
-            elif command[1] == "debug" and message.author.id == REPLACE WITH YOUR ACCOUNT ID: # Replace with your account ID
-                await message.channel.send(
-                    f"**Debug Info**:\n"
-                    f"Spam Threshold: {SPAM_THRESHOLD}\n"
-                    f"Spam Interval: {SPAM_INTERVAL} seconds\n"
-                    f"Timeout Duration: {TIMEOUT_DURATION} seconds\n"
-                    f"Cooldown Duration: {COOLDOWN_DURATION} seconds\n"
-                    f"Spam Alert Interval: {SPAM_ALERT_INTERVAL} seconds\n"
-                    f"User Timeout Cooldown: {USER_TIMEOUT_COOLDOWN} seconds\n"
-                    f"Text Limit: {TEXT_LIMIT} characters\n"
-                    f"Cat API URL: {CAT_API_URL}\n"
-                )
+            await handle_mention_commands(message, command)
 
     # Append current message timestamp
     user_messages[user_id].append(current_time)
 
     # Check for spam
+    await check_for_spam(message, current_time, user_id)
+
+    await bot.process_commands(message)
+
+async def handle_mention_commands(message, command):
+    if command[1] == "ping":
+        start_time = time.time()
+        response_message = await message.channel.send("PONG!")
+        end_time = time.time()
+        response_time = round((end_time - start_time) * 1000, 2)
+        await response_message.edit(content=f"PONG! {response_time} ms")
+    elif command[1] == "rps":
+        await handle_rps_command(message, command)
+    elif command[1] == "cat":
+        await handle_cat_command(message)
+    elif command[1] == "hangman":
+        await start_hangman(message.channel)
+    elif command[1] == "wordle":
+        await start_wordle(message.channel)
+    elif command[1] == "anagram":
+        await start_anagram(message.channel)
+    elif command[1] == "debug" and message.author.id == 1193303506057183272:
+        await message.channel.send(
+            f"**Debug Info**:\n"
+            f"Spam Threshold: {SPAM_THRESHOLD}\n"
+            f"Spam Interval: {SPAM_INTERVAL} seconds\n"
+            f"Timeout Duration: {TIMEOUT_DURATION} seconds\n"
+            f"Cooldown Duration: {COOLDOWN_DURATION} seconds\n"
+            f"Spam Alert Interval: {SPAM_ALERT_INTERVAL} seconds\n"
+            f"User Timeout Cooldown: {USER_TIMEOUT_COOLDOWN} seconds\n"
+            f"Text Limit: {TEXT_LIMIT} characters\n"
+            f"Cat API URL: {CAT_API_URL}\n"
+        )
+
+async def handle_rps_command(message, command):
+    if len(command) == 3:
+        user_choice = command[2].lower()
+        if user_choice in ["rock", "paper", "scissors"]:
+            bot_choice = random.choice(["rock", "paper", "scissors"])
+            result = determine_rps_winner(user_choice, bot_choice)
+            await message.channel.send(f"You chose {user_choice}, I chose {bot_choice}. {result}")
+        else:
+            await message.channel.send("Invalid choice! Choose rock, paper, or scissors.")
+
+async def handle_cat_command(message):
+    async with aiohttp.ClientSession() as session:
+        async with session.get(CAT_API_URL) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                cat_image_url = data[0]['url']
+                await message.channel.send(cat_image_url)
+            else:
+                await message.channel.send("Could not fetch a cat image at the moment. Please try again later.")
+
+async def check_for_spam(message, current_time, user_id):
     if len(user_messages[user_id]) == SPAM_THRESHOLD:
         if (current_time - user_messages[user_id][0]) <= SPAM_INTERVAL:
-            # Check if cooldown is active for the user
             if user_id not in cooldowns or current_time - cooldowns[user_id] >= COOLDOWN_DURATION:
-                # Set slowmode to 10 seconds in the channel
                 await message.channel.edit(slowmode_delay=10)
-                # Send timeout message in chat if cooldown allows
                 if current_time - spam_alert_cooldowns[message.channel.id] >= SPAM_ALERT_INTERVAL:
                     await message.channel.send("Spam detected. Slowmode set to 10 seconds.")
                     spam_alert_cooldowns[message.channel.id] = current_time
 
-                # Time out the user for spamming and send timeout message if cooldown allows
                 if current_time - user_timeout_cooldowns[user_id] >= USER_TIMEOUT_COOLDOWN:
                     try:
                         timeout_until = datetime.now(timezone.utc) + timedelta(seconds=TIMEOUT_DURATION)
@@ -158,10 +174,7 @@ async def on_message(message):
                         user_timeout_cooldowns[user_id] = current_time
                     except discord.Forbidden:
                         await message.channel.send(f"{message.author.mention} attempted to be timed out but the bot lacks permissions.")
-
                 cooldowns[user_id] = current_time
-
-    await bot.process_commands(message)
 
 def determine_rps_winner(user_choice, bot_choice):
     if user_choice == bot_choice:
@@ -179,7 +192,7 @@ async def ban_bernd(ctx):
     for member in ctx.guild.members:
         if 'bernd' in member.name.lower() or 'bernd' in member.display_name.lower() or '✔' in member.name or '✔' in member.display_name:
             await member.ban(reason="Flagged activities")
-            guild = bot.get_guild(REPLACE_WITH_YOUR_SERVER_ID)  # Replace with your server ID
+            guild = bot.get_guild(SERVER_ID)  # Replace with your server ID
             channel = guild.get_channel(QUIET_CHANNEL_ID)  # Replace with your channel ID
             await channel.send(f'{member.name} was banned for flagged activities.')
 
@@ -335,4 +348,5 @@ async def anagram_guess(ctx, guess: str):
     else:
         await ctx.send("Incorrect. Try again!")
 
+# Run the bot
 bot.run(TOKEN)
